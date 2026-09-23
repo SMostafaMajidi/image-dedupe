@@ -12,8 +12,8 @@ CLIP-based near-duplicate image detection. Phases 1–2 done (local CLIP + Qdran
 ## Quick start on Linux
 
 ```bash
-git clone <REPO_URL>
-cd image   # or whatever the clone folder is named
+git clone https://github.com/SMostafaMajidi/image-dedupe.git
+cd image-dedupe
 cp .env.example .env
 
 # Start Qdrant
