@@ -1,0 +1,14 @@
+# Phase 1+: portable stack. Qdrant only for now; app service added in phase 4.
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    container_name: image-dedupe-qdrant
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+volumes:
+  qdrant_storage:
