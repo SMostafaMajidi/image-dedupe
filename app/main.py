@@ -21,7 +21,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("app")
@@ -32,6 +32,10 @@ embedder = get_embedder()
 
 def similarity_threshold() -> float:
     return float(os.getenv("SIMILARITY_THRESHOLD", "0.90"))
+
+
+def max_upload_bytes() -> int:
+    return int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 
 
 def _is_image_content_type(content_type: str | None) -> bool:
@@ -45,14 +49,21 @@ def _is_image_content_type(content_type: str | None) -> bool:
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     db.ensure_collection()
     embedder.load()
-    log.info("startup complete threshold=%.3f", similarity_threshold())
+    log.info(
+        "startup complete threshold=%.3f max_upload=%d qdrant=%s:%s collection=%s",
+        similarity_threshold(),
+        max_upload_bytes(),
+        db.host,
+        db.port,
+        db.collection_name,
+    )
     yield
 
 
 app = FastAPI(
     title="image-dedupe",
     description="CLIP + Qdrant near-duplicate image detection",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -63,6 +74,7 @@ def health() -> dict:
         "status": "ok",
         "collection": db.collection_name,
         "threshold": similarity_threshold(),
+        "max_upload_bytes": max_upload_bytes(),
     }
 
 
@@ -81,7 +93,13 @@ async def embed(
             detail=f"file content-type must be image/*, got {image.content_type!r}",
         )
 
-    data = await image.read()
+    limit = max_upload_bytes()
+    data = await image.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(
+            status_code=413,
+            detail=f"image exceeds MAX_UPLOAD_BYTES={limit}",
+        )
     if not data:
         raise HTTPException(status_code=400, detail="empty image upload")
 
@@ -89,7 +107,7 @@ async def embed(
         vector = embedder.extract(data)
     except InvalidImageError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # model / decode edge cases
+    except Exception as exc:
         log.exception("extract failed for post_uid=%s", post_uid)
         raise HTTPException(
             status_code=400,
@@ -106,7 +124,6 @@ def dedupe(body: DedupeRequest) -> DedupeResponse:
     if not raw:
         raise HTTPException(status_code=400, detail="post_uids list is empty")
 
-    # Deduplicate request order for lookup, but keep first-seen order
     seen: set[str] = set()
     ordered: list[str] = []
     for uid in raw:

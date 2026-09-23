@@ -2,6 +2,9 @@
 
 Point IDs are deterministic UUID5 values derived from post_uid strings.
 post_uid itself is stored in the point payload for reverse lookup.
+
+Connection is configured via ``QDRANT_URL`` (preferred), with fallback to
+``QDRANT_HOST`` / ``QDRANT_PORT`` for local scripts.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ import os
 import uuid
 from pathlib import Path
 from typing import Sequence
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
@@ -28,17 +32,38 @@ def post_uid_to_point_id(post_uid: str) -> str:
     return str(uuid.uuid5(NAMESPACE, post_uid))
 
 
+def _resolve_qdrant_endpoint(
+    url: str | None,
+    host: str | None,
+    port: int | None,
+) -> tuple[str, int]:
+    """Return (host, port) from QDRANT_URL or host/port env defaults."""
+    raw_url = url if url is not None else os.getenv("QDRANT_URL")
+    if raw_url:
+        parsed = urlparse(raw_url)
+        if not parsed.hostname:
+            raise ValueError(f"invalid QDRANT_URL: {raw_url!r}")
+        resolved_port = parsed.port or (443 if parsed.scheme == "https" else 6333)
+        return parsed.hostname, int(resolved_port)
+
+    resolved_host = host or os.getenv("QDRANT_HOST", "localhost")
+    resolved_port = int(
+        port if port is not None else os.getenv("QDRANT_PORT", "6333")
+    )
+    return resolved_host, resolved_port
+
+
 class VectorDB:
     def __init__(
         self,
+        url: str | None = None,
         host: str | None = None,
         port: int | None = None,
         collection_name: str | None = None,
         vector_size: int = VECTOR_SIZE,
     ) -> None:
         load_dotenv(PROJECT_ROOT / ".env")
-        self.host = host or os.getenv("QDRANT_HOST", "localhost")
-        self.port = int(port if port is not None else os.getenv("QDRANT_PORT", "6333"))
+        self.host, self.port = _resolve_qdrant_endpoint(url, host, port)
         self.collection_name = (
             collection_name
             or os.getenv("COLLECTION_NAME")

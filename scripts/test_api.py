@@ -1,21 +1,25 @@
 """Phase 3 smoke test: hit /embed and /dedupe against a running API.
 
 Usage:
-  uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+  docker compose up --build -d
+  # or: uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
   python scripts/test_api.py
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / ".env")
 SAMPLE_DIR = ROOT / "sample_images"
-BASE = "http://127.0.0.1:8000"
+BASE = os.getenv("API_BASE", f"http://127.0.0.1:{os.getenv('APP_PORT', '3020')}")
 
 logging.basicConfig(
     level=logging.INFO,
