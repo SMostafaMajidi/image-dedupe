@@ -14,14 +14,14 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import torch
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from db import VectorDB  # noqa: E402
-from scripts.test_clip import SAMPLE_DIR, embed_image, load_clip  # noqa: E402
+from app.db import VectorDB  # noqa: E402
+from app.embedding import get_embedder  # noqa: E402
+from scripts.test_clip import SAMPLE_DIR  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,7 +60,9 @@ def main() -> int:
         )
         return 1
 
-    model, processor, device = load_clip(model_name)
+    embedder = get_embedder()
+    embedder.load()
+    log.info("using CLIP model=%s", model_name)
 
     original: dict[str, list[float]] = {}
     for post_uid, filename in SAMPLES:
@@ -68,7 +70,7 @@ def main() -> int:
         if not path.is_file():
             log.error("missing sample: %s", path.as_posix())
             return 1
-        vec = embed_image(model, processor, device, path).tolist()
+        vec = embedder.extract_path(path)
         original[post_uid] = vec
         db.upsert_vector(post_uid, vec)
         log.info("stored %s from %s", post_uid, filename)
@@ -152,6 +154,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    # silence unused torch import warning by using it for dtype checks if needed
-    _ = torch
     sys.exit(main())

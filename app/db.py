@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 VECTOR_SIZE = 512
 NAMESPACE = uuid.NAMESPACE_URL
-ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def post_uid_to_point_id(post_uid: str) -> str:
@@ -36,7 +36,7 @@ class VectorDB:
         collection_name: str | None = None,
         vector_size: int = VECTOR_SIZE,
     ) -> None:
-        load_dotenv(ROOT / ".env")
+        load_dotenv(PROJECT_ROOT / ".env")
         self.host = host or os.getenv("QDRANT_HOST", "localhost")
         self.port = int(port if port is not None else os.getenv("QDRANT_PORT", "6333"))
         self.collection_name = (

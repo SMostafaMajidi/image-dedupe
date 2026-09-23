@@ -1,0 +1,1 @@
+"""Image-dedupe FastAPI package."""
