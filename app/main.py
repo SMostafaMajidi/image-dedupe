@@ -9,12 +9,20 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import HTMLResponse
 
+from app.browse import BROWSE_HTML
 from app.db import VectorDB
 from app.dedupe import dedupe_post_uids
 from app.embedding import InvalidImageError, get_embedder
-from app.schemas import DedupeRequest, DedupeResponse, EmbedResponse
+from app.schemas import (
+    DedupeRequest,
+    DedupeResponse,
+    EmbedResponse,
+    PointRow,
+    PointsPageResponse,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
@@ -75,7 +83,30 @@ def health() -> dict:
         "collection": db.collection_name,
         "threshold": similarity_threshold(),
         "max_upload_bytes": max_upload_bytes(),
+        "points": db.count(),
     }
+
+
+@app.get("/browse", response_class=HTMLResponse, include_in_schema=False)
+def browse() -> str:
+    """Simple HTML table of stored post_uid vectors."""
+    return BROWSE_HTML
+
+
+@app.get("/points", response_model=PointsPageResponse)
+def list_points(
+    limit: int = Query(50, ge=1, le=200),
+    offset: str | None = Query(None, description="Scroll offset from previous page"),
+) -> PointsPageResponse:
+    rows, next_offset = db.list_points(limit=limit, offset=offset)
+    return PointsPageResponse(
+        total=db.count(),
+        limit=limit,
+        collection=db.collection_name,
+        offset=offset,
+        next_offset=str(next_offset) if next_offset is not None else None,
+        points=[PointRow(**row) for row in rows],
+    )
 
 
 @app.post("/embed", response_model=EmbedResponse)

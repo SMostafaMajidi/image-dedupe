@@ -165,3 +165,26 @@ class VectorDB:
 
     def count(self) -> int:
         return int(self.client.count(collection_name=self.collection_name, exact=True).count)
+
+    def list_points(
+        self,
+        *,
+        limit: int = 50,
+        offset: str | int | None = None,
+    ) -> tuple[list[dict], str | int | None]:
+        """Scroll collection points (payload only). Returns (rows, next_offset)."""
+        points, next_offset = self.client.scroll(
+            collection_name=self.collection_name,
+            limit=limit,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+        rows = [
+            {
+                "point_id": str(point.id),
+                "post_uid": (point.payload or {}).get("post_uid"),
+            }
+            for point in points
+        ]
+        return rows, next_offset

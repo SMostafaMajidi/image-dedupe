@@ -20,3 +20,17 @@ class DedupeResponse(BaseModel):
     groups: list[list[str]]
     missing_post_uids: list[str]
     threshold: float
+
+
+class PointRow(BaseModel):
+    point_id: str
+    post_uid: str | None = None
+
+
+class PointsPageResponse(BaseModel):
+    total: int
+    limit: int
+    collection: str
+    offset: str | None = None
+    next_offset: str | None = None
+    points: list[PointRow]
