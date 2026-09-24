@@ -146,12 +146,14 @@ class VectorDB:
         self,
         vector: Sequence[float],
         top_k: int = 5,
+        score_threshold: float | None = None,
     ) -> list[dict]:
         # qdrant-client>=1.14 uses query_points instead of deprecated search()
         response = self.client.query_points(
             collection_name=self.collection_name,
             query=list(vector),
             limit=top_k,
+            score_threshold=score_threshold,
             with_payload=True,
         )
         return [

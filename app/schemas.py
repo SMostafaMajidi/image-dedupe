@@ -34,3 +34,19 @@ class PointsPageResponse(BaseModel):
     offset: str | None = None
     next_offset: str | None = None
     points: list[PointRow]
+
+
+class SimilarMatch(BaseModel):
+    post_uid: str
+    score: float
+    point_id: str
+    wisgoon_url: str
+
+
+class SimilarResponse(BaseModel):
+    post_uid: str
+    fetched_from_wisgoon: bool
+    threshold: float
+    query_image_url: str | None = None
+    matches: list[SimilarMatch]
+    match_count: int

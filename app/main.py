@@ -16,13 +16,17 @@ from app.browse import BROWSE_HTML
 from app.db import VectorDB
 from app.dedupe import dedupe_post_uids
 from app.embedding import InvalidImageError, get_embedder
+from app.find import FIND_HTML
 from app.schemas import (
     DedupeRequest,
     DedupeResponse,
     EmbedResponse,
     PointRow,
     PointsPageResponse,
+    SimilarMatch,
+    SimilarResponse,
 )
+from app.wisgoon_http import WisgoonFetchError, download_bytes, fetch_post
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
@@ -87,10 +91,77 @@ def health() -> dict:
     }
 
 
+def wisgoon_permalink(uid: str) -> str:
+    base = os.getenv("WISGOON_WEB_BASE", "https://wisgoon.com").rstrip("/")
+    return f"{base}/p/{uid}/"
+
+
+def ensure_vector(post_uid: str) -> tuple[list[float], bool, str | None]:
+    """Return (vector, fetched_from_wisgoon, image_url)."""
+    existing = db.get_vectors([post_uid])
+    if post_uid in existing:
+        return existing[post_uid], False, None
+
+    try:
+        post = fetch_post(post_uid)
+        data = download_bytes(post.image_url, max_bytes=max_upload_bytes())
+        vector = embedder.extract(data)
+    except WisgoonFetchError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidImageError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        log.exception("ensure_vector failed for %s", post_uid)
+        raise HTTPException(status_code=400, detail=f"failed to ingest post: {exc}") from exc
+
+    db.upsert_vector(post_uid, vector)
+    log.info("ingested missing post_uid=%s from wisgoon", post_uid)
+    return vector, True, post.image_url
+
+
 @app.get("/browse", response_class=HTMLResponse, include_in_schema=False)
 def browse() -> str:
     """Simple HTML table of stored post_uid vectors."""
     return BROWSE_HTML
+
+
+@app.get("/find", response_class=HTMLResponse, include_in_schema=False)
+def find_page() -> str:
+    """UI: look up near-duplicates by post_uid."""
+    return FIND_HTML
+
+
+@app.get("/similar", response_model=SimilarResponse)
+def similar(
+    post_uid: str = Query(..., min_length=1, description="Wisgoon post UID"),
+    top_k: int = Query(30, ge=1, le=100),
+) -> SimilarResponse:
+    """Find near-duplicate posts. Ingests from Wisgoon HTTP if missing locally."""
+    post_uid = post_uid.strip()
+    if not post_uid:
+        raise HTTPException(status_code=422, detail="post_uid must not be empty")
+
+    threshold = similarity_threshold()
+    vector, fetched, image_url = ensure_vector(post_uid)
+    hits = db.search_similar(vector, top_k=top_k, score_threshold=threshold)
+    matches = [
+        SimilarMatch(
+            post_uid=str(hit["post_uid"]),
+            score=float(hit["score"]),
+            point_id=str(hit["point_id"]),
+            wisgoon_url=wisgoon_permalink(str(hit["post_uid"])),
+        )
+        for hit in hits
+        if hit.get("post_uid") and hit["post_uid"] != post_uid
+    ]
+    return SimilarResponse(
+        post_uid=post_uid,
+        fetched_from_wisgoon=fetched,
+        threshold=threshold,
+        query_image_url=image_url,
+        matches=matches,
+        match_count=len(matches),
+    )
 
 
 @app.get("/points", response_model=PointsPageResponse)

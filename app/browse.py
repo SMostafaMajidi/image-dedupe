@@ -101,6 +101,7 @@ BROWSE_HTML = """<!DOCTYPE html>
       </tbody>
     </table>
     <p class="links">
+      پیدا کردن مشابه: <a href="/find">/find</a> —
       JSON: <a href="/points?limit=50" target="_blank">/points</a> —
       API docs: <a href="/docs" target="_blank">/docs</a> —
       Qdrant UI: <a href="http://localhost:6333/dashboard" target="_blank">:6333/dashboard</a>

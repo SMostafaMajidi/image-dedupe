@@ -24,6 +24,7 @@ docker compose logs -f app
 - API docs: http://localhost:3020/docs  
 - Health: http://localhost:3020/health  
 - **جدول وکتورها:** http://localhost:3020/browse  
+- **پیدا کردن مشابه:** http://localhost:3020/find  
 - Qdrant UI: http://localhost:6333/dashboard  
 
 Host API port is `APP_PORT` (default **3020**). Inside the container the app listens on `8000`.
