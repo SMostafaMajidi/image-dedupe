@@ -47,6 +47,22 @@ Generate samples first if needed: `python scripts/generate_samples.py` (host Pyt
 
 Qdrant uses the named volume `qdrant_storage`. After `docker compose restart` or `down` + `up`, vectors remain. Only `docker compose down -v` wipes them.
 
+### Bulk import from Wisgoon (~500k)
+
+Reads DSN from the main SDK config YAML (not the train SDK). Implements its own SQL.
+
+```bash
+# smoke
+QDRANT_URL=http://127.0.0.1:6333 \
+  python scripts/import_wisgoon_posts.py --limit 5 --workers 8
+
+# full
+QDRANT_URL=http://127.0.0.1:6333 \
+  python scripts/import_wisgoon_posts.py --limit 500000 --workers 8
+```
+
+Config path: `WISGOON_CONNECTIONS_YAML` (default production `connections.yaml`).
+
 ## Local Python (optional, without app container)
 
 ```bash
@@ -80,6 +96,7 @@ JSON: `{ "post_uids": [...] }` → `unique_post_uids`, `removed_post_uids`, `gro
 | `app/schemas.py` | Pydantic models |
 | `Dockerfile` | FastAPI image |
 | `docker-compose.yml` | `app` + `qdrant` |
+| `scripts/import_wisgoon_posts.py` | Bulk import Wisgoon posts → Qdrant |
 | `.env.example` | Config template |
 
 ## Config (`.env`)
