@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<title>REL-DUP4 — تست بصری فیلتر</title>
+<style>
+  :root { --bg:#0f1419; --card:#1a222c; --text:#e8eef5; --muted:#9aa8b8; --ok:#3ecf8e; --bad:#ff6b6b; --line:#2a3542; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: "Vazirmatn", "Tahoma", sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:1100px; margin:0 auto; padding:32px 20px 64px; }
+  h1 { font-size:1.6rem; margin:0 0 8px; }
+  .sub { color:var(--muted); margin-bottom:28px; line-height:1.7; }
+  .strip { width:100%; border-radius:12px; border:1px solid var(--line); margin-bottom:28px; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  @media (max-width:800px) { .grid { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .card img { width:100%; display:block; aspect-ratio:1; object-fit:cover; background:#111; }
+  .meta { padding:14px 16px 18px; }
+  .tag { display:inline-block; font-size:.75rem; font-weight:700; padding:3px 8px; border-radius:999px; margin-bottom:8px; }
+  .tag.keep { background:rgba(62,207,142,.15); color:var(--ok); }
+  .tag.remove { background:rgba(255,107,107,.15); color:var(--bad); }
+  .meta h2 { margin:0 0 6px; font-size:1.05rem; }
+  .meta dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:4px 10px; font-size:.85rem; color:var(--muted); }
+  .meta dt { color:#7f8b99; }
+  .meta dd { margin:0; font-family: ui-monospace, monospace; color:var(--text); direction:ltr; text-align:left; word-break:break-all; }
+  .result { margin-top:28px; padding:18px 20px; border-radius:12px; border:1px solid var(--line); background:var(--card); }
+  .result strong { color:var(--ok); }
+  code { direction:ltr; font-family:ui-monospace,monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1>تست بصری فیلتر related (REL-DUP4)</h1>
+  <p class="sub">
+    seed واقعی ویسگون + نسخهٔ لوگودار مصنوعی + یک پست نامرتبط.
+    قانون: اگر Hamming ≤ ۱۰ → همان رسانه → از لیست related حذف می‌شود.
+    فقط روی ES لوکال؛ پرود دست نخورده.
+  </p>
+
+  <img class="strip" src="compare_strip.jpg" alt="مقایسه سه‌تایی"/>
+
+  <div class="grid">
+    <article class="card">
+      <img src="01_seed.jpg" alt="seed"/>
+      <div class="meta">
+        <span class="tag keep">KEEP — seed</span>
+        <h2>عکس اصلی</h2>
+        <dl>
+          <dt>id</dt><dd>82361745</dd>
+          <dt>uid</dt><dd>PBU1U6BM57</dd>
+          <dt>phash</dt><dd>c0f0ff3f2cc0a70c</dd>
+          <dt>hamming</dt><dd>0 (مرجع)</dd>
+        </dl>
+      </div>
+    </article>
+    <article class="card">
+      <img src="02_near_dup_logo.jpg" alt="near-dup"/>
+      <div class="meta">
+        <span class="tag remove">REMOVE — near-dup</span>
+        <h2>همان عکس + لوگوی گوشه</h2>
+        <dl>
+          <dt>id</dt><dd>999000001 (synthetic)</dd>
+          <dt>uid</dt><dd>LOCALNEARDUP1</dd>
+          <dt>phash</dt><dd>c0e0ff3f2cc2a70c</dd>
+          <dt>hamming vs seed</dt><dd>2 ≤ 10 → MERGE</dd>
+        </dl>
+      </div>
+    </article>
+    <article class="card">
+      <img src="03_unrelated.jpg" alt="unrelated"/>
+      <div class="meta">
+        <span class="tag keep">KEEP — unrelated</span>
+        <h2>پست واقعاً متفاوت</h2>
+        <dl>
+          <dt>id</dt><dd>82361735</dd>
+          <dt>uid</dt><dd>T59SBK7IYI</dd>
+          <dt>phash</dt><dd>c46e2a1f8db5f04a</dd>
+          <dt>hamming vs seed</dt><dd>28 &gt; 10 → KEEP</dd>
+        </dl>
+      </div>
+    </article>
+  </div>
+
+  <div class="result">
+    <div>ورودی فیلتر گیت‌وی:</div>
+    <code>seed=82361745  candidates=[999000001, 82361735]</code>
+    <div style="margin-top:10px">خروجی:</div>
+    <code>survivors=[82361735]</code>
+    <p style="margin:12px 0 0"><strong>PASS</strong> — near-dup حذف شد؛ unrelated ماند.</p>
+  </div>
+</main>
+</body>
+</html>

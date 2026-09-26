@@ -65,6 +65,28 @@ QDRANT_URL=http://127.0.0.1:6333 \
 
 Config path: `WISGOON_CONNECTIONS_YAML` (default production `connections.yaml`).
 
+### REL-DUP4 — pHash → Elasticsearch (for gateway related filter)
+
+Gateway reads `image_phash` from `wis-post-0.0.2-v3` (no request-time Python call).
+
+```bash
+# stage 1 — mapping (idempotent; already applied on cluster)
+python scripts/put_es_phash_mapping.py
+curl -s "$ELASTIC_URL/wis-post-0.0.2-v3/_mapping/field/image_phash" | python3 -m json.tool
+
+# stage 2 — backfill (testable with --limit)
+.venv/bin/python scripts/backfill_phash_es.py --limit 20 --workers 8
+.venv/bin/python scripts/backfill_phash_es.py --limit 600000 --workers 32   # ~1%
+
+# verify coverage
+curl -s "$ELASTIC_URL/wis-post-0.0.2-v3/_count" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":{"exists":{"field":"image_phash"}}}'
+```
+
+Measured ~20–25 posts/s with 32 workers on the lab network (download-bound).
+CLIP import is much slower; this path is **pHash-only**.
+
 ## Local Python (optional, without app container)
 
 ```bash
@@ -109,7 +131,9 @@ narrower than the general semantic-similarity mode (`/similar`).
 | `app/schemas.py` | Pydantic models |
 | `Dockerfile` | FastAPI image |
 | `docker-compose.yml` | `app` + `qdrant` |
-| `scripts/import_wisgoon_posts.py` | Bulk import Wisgoon posts → Qdrant |
+| `scripts/import_wisgoon_posts.py` | Bulk import Wisgoon posts → Qdrant (CLIP) |
+| `scripts/put_es_phash_mapping.py` | REL-DUP4: ensure `image_phash` ES mapping |
+| `scripts/backfill_phash_es.py` | REL-DUP4: pHash → ES (no CLIP) |
 | `.env.example` | Config template |
 
 ## Config (`.env`)
