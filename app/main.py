@@ -17,6 +17,8 @@ from app.db import VectorDB
 from app.dedupe import dedupe_post_uids
 from app.embedding import InvalidImageError, get_embedder
 from app.find import FIND_HTML
+from app.phash import InvalidImageError as InvalidImageHashError
+from app.phash import compute_phash
 from app.schemas import (
     DedupeRequest,
     DedupeResponse,
@@ -46,8 +48,28 @@ def similarity_threshold() -> float:
     return float(os.getenv("SIMILARITY_THRESHOLD", "0.90"))
 
 
+def dedupe_similarity_threshold() -> float:
+    """Stricter than SIMILARITY_THRESHOLD: for REL-DUP ('same media'), not
+    the broader 'semantically similar' use case behind /similar."""
+    return float(os.getenv("DEDUPE_SIMILARITY_THRESHOLD", "0.97"))
+
+
+def dedupe_hash_max_distance() -> int:
+    """Max pHash Hamming distance (0..64 for the default 8x8 hash) to treat
+    two posts as the same underlying media (edits/logo/crop tolerant)."""
+    return int(os.getenv("DEDUPE_HASH_MAX_DISTANCE", "10"))
+
+
 def max_upload_bytes() -> int:
     return int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
+
+
+def _safe_phash(data: bytes, post_uid: str) -> str | None:
+    try:
+        return compute_phash(data)
+    except InvalidImageHashError as exc:
+        log.warning("phash failed for post_uid=%s: %s", post_uid, exc)
+        return None
 
 
 def _is_image_content_type(content_type: str | None) -> bool:
@@ -86,6 +108,8 @@ def health() -> dict:
         "status": "ok",
         "collection": db.collection_name,
         "threshold": similarity_threshold(),
+        "dedupe_threshold": dedupe_similarity_threshold(),
+        "dedupe_hash_max_distance": dedupe_hash_max_distance(),
         "max_upload_bytes": max_upload_bytes(),
         "points": db.count(),
     }
@@ -114,8 +138,9 @@ def ensure_vector(post_uid: str) -> tuple[list[float], bool, str | None]:
         log.exception("ensure_vector failed for %s", post_uid)
         raise HTTPException(status_code=400, detail=f"failed to ingest post: {exc}") from exc
 
-    db.upsert_vector(post_uid, vector)
-    log.info("ingested missing post_uid=%s from wisgoon", post_uid)
+    phash = _safe_phash(data, post_uid)
+    db.upsert_vector(post_uid, vector, phash=phash)
+    log.info("ingested missing post_uid=%s from wisgoon phash=%s", post_uid, phash)
     return vector, True, post.image_url
 
 
@@ -216,8 +241,9 @@ async def embed(
             detail=f"failed to process image: {exc}",
         ) from exc
 
-    db.upsert_vector(post_uid, vector)
-    return EmbedResponse(post_uid=post_uid, status="stored")
+    phash = _safe_phash(data, post_uid)
+    db.upsert_vector(post_uid, vector, phash=phash)
+    return EmbedResponse(post_uid=post_uid, status="stored", phash=phash)
 
 
 @app.post("/dedupe", response_model=DedupeResponse)
@@ -236,12 +262,17 @@ def dedupe(body: DedupeRequest) -> DedupeResponse:
         ordered.append(uid)
 
     vectors = db.get_vectors(ordered)
-    threshold = similarity_threshold()
-    unique, removed, groups, missing = dedupe_post_uids(ordered, vectors, threshold)
+    hashes = db.get_hashes(ordered)
+    threshold = dedupe_similarity_threshold()
+    hash_max_distance = dedupe_hash_max_distance()
+    unique, removed, groups, missing = dedupe_post_uids(
+        ordered, vectors, threshold, hashes=hashes, hash_max_distance=hash_max_distance
+    )
     return DedupeResponse(
         unique_post_uids=unique,
         removed_post_uids=removed,
         groups=groups,
         missing_post_uids=missing,
         threshold=threshold,
+        hash_max_distance=hash_max_distance,
     )

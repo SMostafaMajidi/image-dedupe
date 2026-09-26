@@ -6,12 +6,33 @@ Paths are POSIX-style relative paths for portability (Windows + Linux).
 
 from __future__ import annotations
 
+import random
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "sample_images"
+
+
+def _add_texture(img: Image.Image, seed: int, amount: int = 18) -> Image.Image:
+    """Add mild per-pixel noise so images have real-photo-like local texture
+    (a flat gradient makes a small corner watermark unrealistically dominant
+    in both pHash and CLIP's global pooled features)."""
+    rng = random.Random(seed)
+    out = img.copy()
+    pixels = out.load()
+    w, h = out.size
+    for y in range(h):
+        for x in range(w):
+            r, g, b = pixels[x, y]
+            d = rng.randint(-amount, amount)
+            pixels[x, y] = (
+                max(0, min(255, r + d)),
+                max(0, min(255, g + d)),
+                max(0, min(255, b + d)),
+            )
+    return out
 
 
 def _save(img: Image.Image, name: str) -> Path:
@@ -78,19 +99,40 @@ def make_city(width: int = 384, height: int = 256) -> Image.Image:
     return img
 
 
+def make_watermarked(base: Image.Image) -> Image.Image:
+    """Same media + a small semi-transparent corner logo (REL-DUP scenario:
+    realistic small watermark, not covering a large image fraction)."""
+    img = base.copy()
+    w, h = img.size
+    box = (w - 46, h - 16, w - 6, h - 6)
+    overlay = img.crop(box)
+    pixels = overlay.load()
+    ow, oh = overlay.size
+    for y in range(oh):
+        for x in range(ow):
+            r, g, b = pixels[x, y]
+            pixels[x, y] = (r // 3, g // 3, b // 3)
+    img.paste(overlay, box)
+    return img
+
+
 def main() -> None:
-    sunset = make_sunset()
+    sunset = _add_texture(make_sunset(), seed=1)
     sunset_similar = ImageEnhance.Brightness(sunset.copy()).enhance(1.12)
     sunset_similar = sunset_similar.filter(ImageFilter.SMOOTH)
+    sunset_watermarked = make_watermarked(sunset)
+    sunset_recompressed = sunset.copy().resize((192, 128)).resize((384, 256))
 
-    ocean = make_ocean()
+    ocean = _add_texture(make_ocean(), seed=2)
     ocean_similar = ocean.copy().crop((12, 8, 372, 248)).resize((384, 256))
 
-    forest = make_forest()
-    city = make_city()
+    forest = _add_texture(make_forest(), seed=3)
+    city = _add_texture(make_city(), seed=4)
 
     _save(sunset, "sunset.jpg")
     _save(sunset_similar, "sunset_bright.jpg")
+    _save(sunset_watermarked, "sunset_watermark.jpg")
+    _save(sunset_recompressed, "sunset_resized.jpg")
     _save(ocean, "ocean.jpg")
     _save(ocean_similar, "ocean_crop.jpg")
     _save(forest, "forest.jpg")

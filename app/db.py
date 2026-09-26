@@ -101,19 +101,27 @@ class VectorDB:
             ),
         )
 
-    def upsert_vector(self, post_uid: str, vector: Sequence[float]) -> str:
+    def upsert_vector(
+        self,
+        post_uid: str,
+        vector: Sequence[float],
+        phash: str | None = None,
+    ) -> str:
         point_id = post_uid_to_point_id(post_uid)
+        payload: dict = {"post_uid": post_uid}
+        if phash:
+            payload["phash"] = phash
         self.client.upsert(
             collection_name=self.collection_name,
             points=[
                 qm.PointStruct(
                     id=point_id,
                     vector=list(vector),
-                    payload={"post_uid": post_uid},
+                    payload=payload,
                 )
             ],
         )
-        log.info("upserted post_uid=%s point_id=%s", post_uid, point_id)
+        log.info("upserted post_uid=%s point_id=%s phash=%s", post_uid, point_id, phash)
         return point_id
 
     def get_vectors(self, post_uid_list: Sequence[str]) -> dict[str, list[float]]:
@@ -140,6 +148,28 @@ class VectorDB:
                 # named vectors (not used yet) — take first
                 vec = next(iter(vec.values()))
             result[uid] = list(vec)
+        return result
+
+    def get_hashes(self, post_uid_list: Sequence[str]) -> dict[str, str]:
+        """Return {post_uid: phash} for the given uids that have a stored phash."""
+        if not post_uid_list:
+            return {}
+
+        id_to_uid = {post_uid_to_point_id(uid): uid for uid in post_uid_list}
+        points = self.client.retrieve(
+            collection_name=self.collection_name,
+            ids=list(id_to_uid.keys()),
+            with_payload=True,
+            with_vectors=False,
+        )
+
+        result: dict[str, str] = {}
+        for point in points:
+            payload = point.payload or {}
+            uid = id_to_uid.get(str(point.id)) or payload.get("post_uid")
+            phash = payload.get("phash")
+            if uid and phash:
+                result[uid] = str(phash)
         return result
 
     def search_similar(

@@ -1,8 +1,20 @@
-"""Near-duplicate grouping via pairwise cosine similarity + Union-Find."""
+"""Near-duplicate grouping via pairwise cosine similarity + Union-Find.
+
+Two independent signals can trigger a merge:
+  1. CLIP cosine similarity >= ``threshold`` (broad "semantically similar").
+  2. pHash Hamming distance <= ``hash_max_distance`` (tight "same media,
+     minor edit/logo/crop/recompression"), when both posts have a hash.
+
+Either signal is sufficient — this is the "exact media, regardless of
+logo/edit" use case (REL-DUP), which is intentionally stricter/narrower
+than the general semantic-similarity use case (REL-SEM / ``/similar``).
+"""
 
 from __future__ import annotations
 
 from typing import Hashable, Iterable, Sequence, TypeVar
+
+from app.phash import hamming_distance
 
 T = TypeVar("T", bound=Hashable)
 
@@ -39,8 +51,20 @@ def dedupe_post_uids(
     post_uids: Sequence[str],
     vectors: dict[str, list[float]],
     threshold: float,
+    hashes: dict[str, str] | None = None,
+    hash_max_distance: int | None = None,
 ) -> tuple[list[str], list[str], list[list[str]], list[str]]:
-    """Group similar posts with Union-Find.
+    """Group similar/duplicate posts with Union-Find.
+
+    Parameters
+    ----------
+    hashes
+        Optional {post_uid: phash-hex}. When given together with
+        ``hash_max_distance``, a pair also merges if their pHash Hamming
+        distance is within that bound — independent of the cosine check.
+    hash_max_distance
+        Max Hamming distance (0..64 for the default 8x8 pHash) to treat two
+        posts as the same underlying media.
 
     Returns
     -------
@@ -53,6 +77,8 @@ def dedupe_post_uids(
     missing_post_uids
         Requested uids with no vector in the store (never silently dropped).
     """
+    hashes = hashes or {}
+
     # Preserve order; drop exact duplicate ids in the request itself
     seen: set[str] = set()
     ordered: list[str] = []
@@ -72,10 +98,22 @@ def dedupe_post_uids(
     uf = UnionFind(present)
     n = len(present)
     for i in range(n):
-        vi = vectors[present[i]]
+        uid_i = present[i]
+        vi = vectors[uid_i]
+        hash_i = hashes.get(uid_i)
         for j in range(i + 1, n):
-            if cosine_similarity(vi, vectors[present[j]]) >= threshold:
-                uf.union(present[i], present[j])
+            uid_j = present[j]
+            if cosine_similarity(vi, vectors[uid_j]) >= threshold:
+                uf.union(uid_i, uid_j)
+                continue
+            hash_j = hashes.get(uid_j)
+            if (
+                hash_i
+                and hash_j
+                and hash_max_distance is not None
+                and hamming_distance(hash_i, hash_j) <= hash_max_distance
+            ):
+                uf.union(uid_i, uid_j)
 
     root_to_group: dict[str, list[str]] = {}
     for uid in present:

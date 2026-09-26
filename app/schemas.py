@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class EmbedResponse(BaseModel):
     post_uid: str
     status: str = "stored"
+    phash: str | None = None
 
 
 class DedupeRequest(BaseModel):
@@ -20,6 +21,7 @@ class DedupeResponse(BaseModel):
     groups: list[list[str]]
     missing_post_uids: list[str]
     threshold: float
+    hash_max_distance: int | None = None
 
 
 class PointRow(BaseModel):

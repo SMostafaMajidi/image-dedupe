@@ -87,6 +87,16 @@ Multipart: `post_uid` + `image` (`image/*`). Max size: `MAX_UPLOAD_BYTES`.
 
 JSON: `{ "post_uids": [...] }` → `unique_post_uids`, `removed_post_uids`, `groups`, `missing_post_uids`.
 
+Vectors must already exist in Qdrant (embed via `/embed` or `/similar` first — the
+latter auto-ingests from Wisgoon if missing). Two post_uids are merged into the
+same group if **either**:
+- CLIP cosine similarity ≥ `DEDUPE_SIMILARITY_THRESHOLD` (default `0.97`,
+  stricter than `SIMILARITY_THRESHOLD` used by `/similar`), or
+- pHash Hamming distance ≤ `DEDUPE_HASH_MAX_DISTANCE` (default `10`, 0–64 range)
+
+This "exact media regardless of edits/logo" mode (REL-DUP) is intentionally
+narrower than the general semantic-similarity mode (`/similar`).
+
 ## Project layout
 
 | Path | Role |
@@ -94,7 +104,8 @@ JSON: `{ "post_uids": [...] }` → `unique_post_uids`, `removed_post_uids`, `gro
 | `app/main.py` | FastAPI endpoints |
 | `app/embedding.py` | CLIP `extract` |
 | `app/db.py` | Qdrant via `QDRANT_URL` |
-| `app/dedupe.py` | Union-Find grouping |
+| `app/dedupe.py` | Union-Find grouping (cosine OR pHash) |
+| `app/phash.py` | Perceptual hash (pHash) for exact-media dedupe |
 | `app/schemas.py` | Pydantic models |
 | `Dockerfile` | FastAPI image |
 | `docker-compose.yml` | `app` + `qdrant` |
@@ -106,7 +117,9 @@ JSON: `{ "post_uids": [...] }` → `unique_post_uids`, `removed_post_uids`, `gro
 | Key | Meaning |
 |-----|---------|
 | `CLIP_MODEL_NAME` | HuggingFace CLIP id |
-| `SIMILARITY_THRESHOLD` | Cosine threshold for duplicates |
+| `SIMILARITY_THRESHOLD` | Cosine threshold for `/similar` (broad, semantic) |
+| `DEDUPE_SIMILARITY_THRESHOLD` | Stricter cosine threshold for `/dedupe` (exact media), default `0.97` |
+| `DEDUPE_HASH_MAX_DISTANCE` | pHash Hamming distance bound for `/dedupe`, default `10` |
 | `QDRANT_URL` | e.g. `http://qdrant:6333` in Compose |
 | `COLLECTION_NAME` | Qdrant collection |
 | `APP_PORT` | Host port for the API (default 3020) |
