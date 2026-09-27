@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage 1 (REL-DUP4): ensure ``image_phash`` / ``image_phash256`` keyword mappings.
+"""Stage 1 (REL-DUP4): ensure ``image_phash`` keyword mapping (256-bit pHash hex).
 
 Idempotent. Safe to re-run. Does not write any documents.
 
@@ -33,8 +33,6 @@ def main() -> int:
         {
             "properties": {
                 "image_phash": {"type": "keyword", "doc_values": True},
-                # 16x16 pHash; used by the gateway related filter
-                "image_phash256": {"type": "keyword", "doc_values": True},
             }
         }
     ).encode()
@@ -52,7 +50,7 @@ def main() -> int:
         return 1
 
     check = urllib.request.urlopen(
-        f"{args.url.rstrip('/')}/{args.index}/_mapping/field/image_phash,image_phash256",
+        f"{args.url.rstrip('/')}/{args.index}/_mapping/field/image_phash",
         timeout=15,
     )
     print(check.read().decode())

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Stage 2 (REL-DUP4): compute pHash for IMAGE posts and write to Elasticsearch.
+"""Stage 2 (REL-DUP4): compute 256-bit pHash for IMAGE/VIDEO posts → ES ``image_phash``.
+
+VIDEO posts are hashed from their thumbnail (``pin_post.image``). Near-flat
+images get ``image_phash: null`` (their pHash is noise; also clears old values).
 
 No CLIP — download + pHash + ES partial update only. Much faster than
 ``import_wisgoon_posts.py``.
@@ -14,8 +17,11 @@ Examples (testable stages):
   # dry-run (download+hash, no ES write)
   python scripts/backfill_phash_es.py --limit 50 --dry-run
 
+  # video thumbnails
+  python scripts/backfill_phash_es.py --content-type VIDEO --limit 20
+
 Verify one doc:
-  curl -s "$ELASTIC_URL/wis-post-0.0.2-v3/_doc/<POST_ID>?_source_includes=image_phash,image_phash256,id"
+  curl -s "$ELASTIC_URL/wis-post-0.0.2-v3/_doc/<POST_ID>?_source_includes=image_phash,id,content_type"
 """
 
 from __future__ import annotations
@@ -62,15 +68,15 @@ load_dotenv(ROOT / ".env")
 
 DEFAULT_ES_URL = os.getenv("ELASTIC_URL", "http://192.168.20.208:9200")
 DEFAULT_ES_INDEX = os.getenv("ELASTIC_POST_INDEX", "wis-post-0.0.2-v3")
-# pHash hash_size -> ES field
-HASH_FIELDS = {8: "image_phash", 16: "image_phash256"}
+HASH_SIZE = 16  # 16x16 = 256-bit; gateway ignores values of any other length
+CONTENT_TYPES = ("IMAGE", "VIDEO")
 
 
 def es_bulk_update(
     client: httpx.Client,
     base_url: str,
     index: str,
-    items: list[tuple[int, dict[str, str]]],
+    items: list[tuple[int, dict[str, str | None]]],
 ) -> tuple[int, int]:
     """Partial-update hash fields via ES _bulk. Returns (ok, fail)."""
     if not items:
@@ -130,10 +136,12 @@ def parse_args() -> argparse.Namespace:
         default=25.0,
         help="skip near-flat images (app.phash.detail_score below this); 0 disables",
     )
+    p.add_argument("--field", default="image_phash", help="ES field for the 256-bit pHash")
     p.add_argument(
-        "--hash-sizes",
-        default="16",
-        help="comma list of pHash sizes: 16 -> image_phash256 (gateway), 8 -> image_phash",
+        "--content-type",
+        default="IMAGE",
+        choices=CONTENT_TYPES,
+        help="IMAGE posts, or VIDEO posts hashed from their thumbnail",
     )
     p.add_argument(
         "--elastic-url",
@@ -206,32 +214,29 @@ def main() -> int:
                 args.max_id = ck_id
                 log.info("resume: continuing below max_id=%d from %s", ck_id, args.checkpoint_file)
 
-    hash_sizes = tuple(int(x) for x in args.hash_sizes.split(",") if x.strip())
-    if not hash_sizes or any(h not in HASH_FIELDS for h in hash_sizes):
-        log.error("--hash-sizes must be a subset of %s", sorted(HASH_FIELDS))
-        return 2
-
     mysql_cfg = load_mysql_config(args.config, args.dsn_key)
     log.info(
-        "mysql=%s:%s/%s es=%s index=%s limit=%d workers=%d dry_run=%s max_id=%s fields=%s",
+        "mysql=%s:%s/%s es=%s index=%s field=%s type=%s limit=%d workers=%d dry_run=%s max_id=%s",
         mysql_cfg.host,
         mysql_cfg.port,
         mysql_cfg.database,
         args.elastic_url,
         args.index,
+        args.field,
+        args.content_type,
         args.limit,
         args.workers,
         args.dry_run,
         args.max_id,
-        [HASH_FIELDS[h] for h in hash_sizes],
     )
 
     ok = 0
     fail = 0
     skip = 0
+    low_detail = 0
     last_id: int | None = None
     lock = threading.Lock()
-    pending: list[tuple[int, dict[str, str]]] = []
+    pending: list[tuple[int, dict[str, str | None]]] = []
     t0 = time.time()
 
     http_client = httpx.Client(
@@ -260,6 +265,8 @@ def main() -> int:
                 "ok": ok,
                 "fail": fail,
                 "skip": skip,
+                "low_detail_cleared": low_detail,
+                "content_type": args.content_type,
                 "pending": len(pending),
                 "last_id": last_id,
                 "limit": args.limit,
@@ -301,24 +308,24 @@ def main() -> int:
             fail += b_fail
         write_progress(force=True)
 
-    def process(post: PostRow) -> tuple[str, int | None, dict[str, str] | None]:
+    def process(post: PostRow) -> tuple[str, int | None, dict[str, str | None] | None]:
         url = make_image_url(post.image)
         try:
             data = download_image(http_client, url, args.max_upload_bytes)
         except Exception:
             return "fail_download", None, None
         try:
-            hashes = compute_phashes(data, hash_sizes, args.min_detail)
+            hashes = compute_phashes(data, (HASH_SIZE,), args.min_detail)
         except LowDetailImageError:
-            return "skip_low_detail", post.id, None
+            return "low_detail", post.id, {args.field: None}
         except InvalidImageError:
             return "skip_invalid", None, None
         except Exception:
             return "fail_hash", None, None
-        return "hashed", post.id, {HASH_FIELDS[k]: v for k, v in hashes.items()}
+        return "hashed", post.id, {args.field: hashes[HASH_SIZE]}
 
-    def handle(result: tuple[str, int | None, dict[str, str] | None]) -> None:
-        nonlocal ok, fail, skip, pending, last_id
+    def handle(result: tuple[str, int | None, dict[str, str | None] | None]) -> None:
+        nonlocal ok, fail, skip, low_detail, pending, last_id
         status, post_id, doc = result
         should_flush = False
         with lock:
@@ -326,11 +333,13 @@ def main() -> int:
                 # keyset is DESC; keep the smallest id seen as resume cursor
                 if last_id is None or post_id < last_id:
                     last_id = post_id
+            if status == "low_detail":
+                low_detail += 1
             if status.startswith("skip"):
                 skip += 1
             elif status.startswith("fail"):
                 fail += 1
-            elif status == "hashed" and post_id is not None and doc is not None:
+            elif status in ("hashed", "low_detail") and post_id is not None and doc is not None:
                 if args.dry_run:
                     ok += 1
                 else:
@@ -359,6 +368,7 @@ def main() -> int:
             inflight: set = set()
             for post in iter_image_posts(
                 mysql_cfg,
+                content_type=args.content_type,
                 limit=args.limit,
                 batch_size=args.batch_size,
                 max_id=args.max_id,
@@ -381,8 +391,9 @@ def main() -> int:
     elapsed = time.time() - t0
     total = ok + fail + skip
     log.info(
-        "DONE ok=%d fail=%d skip=%d last_id=%s elapsed=%.1fs (%.2f/s)",
+        "DONE ok=%d (low_detail_cleared=%d) fail=%d skip=%d last_id=%s elapsed=%.1fs (%.2f/s)",
         ok,
+        low_detail,
         fail,
         skip,
         last_id,

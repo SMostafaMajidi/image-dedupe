@@ -127,8 +127,9 @@ def iter_image_posts(
     limit: int,
     batch_size: int = 500,
     max_id: int | None = None,
+    content_type: str = "IMAGE",
 ) -> Iterator[PostRow]:
-    """Keyset pagination over IMAGE posts (FORCE INDEX for speed)."""
+    """Keyset pagination over IMAGE posts, or VIDEO posts (``image`` = thumbnail)."""
     conn = connect_mysql(cfg)
     fetched = 0
     cursor_id = max_id if max_id is not None else 2**63 - 1
@@ -140,7 +141,7 @@ def iter_image_posts(
                     """
                     SELECT id, uid, image
                     FROM pin_post FORCE INDEX (pin_post_content_type_IDX)
-                    WHERE content_type = 'IMAGE'
+                    WHERE content_type = %s
                       AND status = 1
                       AND image IS NOT NULL
                       AND image != ''
@@ -148,7 +149,7 @@ def iter_image_posts(
                     ORDER BY id DESC
                     LIMIT %s
                     """,
-                    (cursor_id, need),
+                    (content_type, cursor_id, need),
                 )
                 rows = cur.fetchall()
                 if not rows:

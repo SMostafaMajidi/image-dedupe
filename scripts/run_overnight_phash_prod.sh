@@ -22,15 +22,16 @@ LIMIT="${LIMIT:-400000}"
 WORKERS="${WORKERS:-28}"
 FLUSH="${FLUSH:-100}"
 BATCH="${BATCH:-500}"
-HASH_SIZES="${HASH_SIZES:-16}"
+CONTENT_TYPE="${CONTENT_TYPE:-IMAGE}"
 PY="${PY:-$ROOT/.venv/bin/python}"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 LOG_DIR="${LOG_DIR:-$ROOT/logs}"
 mkdir -p "$LOG_DIR"
-LOG_FILE="${LOG_FILE:-$LOG_DIR/overnight_phash_${STAMP}.log}"
-STATUS_FILE="${STATUS_FILE:-$LOG_DIR/overnight_phash_status.json}"
-CHECKPOINT_FILE="${CHECKPOINT_FILE:-$LOG_DIR/overnight_phash_checkpoint.txt}"
-LATEST_LOG_LINK="$LOG_DIR/overnight_phash_latest.log"
+TAG="$(echo "$CONTENT_TYPE" | tr '[:upper:]' '[:lower:]')"
+LOG_FILE="${LOG_FILE:-$LOG_DIR/phash256_${TAG}_${STAMP}.log}"
+STATUS_FILE="${STATUS_FILE:-$LOG_DIR/phash256_${TAG}_status.json}"
+CHECKPOINT_FILE="${CHECKPOINT_FILE:-$LOG_DIR/phash256_${TAG}_checkpoint.txt}"
+LATEST_LOG_LINK="$LOG_DIR/phash256_${TAG}_latest.log"
 
 RESUME_ARGS=()
 if [[ "${1:-}" == "--resume" ]]; then
@@ -49,7 +50,7 @@ ln -sfn "$(basename "$LOG_FILE")" "$LATEST_LOG_LINK" 2>/dev/null || true
 {
   echo "=== overnight phash → prod ES ==="
   echo "started: $(date -Is)"
-  echo "limit=$LIMIT workers=$WORKERS flush=$FLUSH hash_sizes=$HASH_SIZES"
+  echo "type=$CONTENT_TYPE limit=$LIMIT workers=$WORKERS flush=$FLUSH"
   echo "status=$STATUS_FILE"
   echo "checkpoint=$CHECKPOINT_FILE"
   echo "log=$LOG_FILE"
@@ -64,7 +65,7 @@ set +e
   --workers "$WORKERS" \
   --batch-size "$BATCH" \
   --flush-size "$FLUSH" \
-  --hash-sizes "$HASH_SIZES" \
+  --content-type "$CONTENT_TYPE" \
   --checkpoint-file "$CHECKPOINT_FILE" \
   --status-file "$STATUS_FILE" \
   "${RESUME_ARGS[@]}" \
@@ -77,7 +78,7 @@ set -e
   echo "finished: $(date -Is) exit=$RC"
   echo "status file: $STATUS_FILE"
   echo "verify count:"
-  echo "  curl -s \"\$ELASTIC_URL/wis-post-0.0.2-v3/_count\" -H 'Content-Type: application/json' -d '{\"query\":{\"exists\":{\"field\":\"image_phash256\"}}}'"
+  echo "  curl -s \"\$ELASTIC_URL/wis-post-0.0.2-v3/_count\" -H 'Content-Type: application/json' -d '{\"query\":{\"exists\":{\"field\":\"image_phash\"}}}'"
 } | tee -a "$LOG_FILE"
 
 exit "$RC"

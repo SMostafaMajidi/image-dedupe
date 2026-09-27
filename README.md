@@ -67,10 +67,12 @@ Config path: `WISGOON_CONNECTIONS_YAML` (default production `connections.yaml`).
 
 ### REL-DUP4 — pHash → Elasticsearch (for gateway related filter)
 
-Gateway reads `image_phash256` (16x16 pHash, Hamming ≤ 16) from `wis-post-0.0.2-v3`
-(no request-time Python call). The 64-bit `image_phash` could not separate
+Gateway reads `image_phash` — a 256-bit (16x16) pHash, Hamming ≤ 16 — from
+`wis-post-0.0.2-v3` (no request-time Python call). 64-bit pHash could not separate
 same-template posts with different text (tweet cards, text screens) from real
-reposts; see `sample_images/related_eval/template_probe/`.
+reposts; see `sample_images/related_eval/report_256_vs_64.html`. VIDEO posts are
+hashed from their thumbnail. Near-flat images get `image_phash: null`. The gateway
+ignores values that are not 64 hex chars (old 64-bit hashes during migration).
 
 ```bash
 # stage 1 — mapping (idempotent)
@@ -78,13 +80,14 @@ python scripts/put_es_phash_mapping.py
 
 # stage 2 — backfill (testable with --limit; default --hash-sizes 16)
 .venv/bin/python scripts/backfill_phash_es.py --limit 20 --workers 8
-LIMIT=1000000 ./scripts/run_overnight_phash_prod.sh            # overnight, in screen
-./scripts/run_overnight_phash_prod.sh --resume                 # continue older posts
+LIMIT=1000000 ./scripts/run_overnight_phash_prod.sh                      # IMAGE, in screen
+CONTENT_TYPE=VIDEO LIMIT=1000000 ./scripts/run_overnight_phash_prod.sh   # video thumbnails
+./scripts/run_overnight_phash_prod.sh --resume                           # continue older posts
 
 # verify coverage
 curl -s "$ELASTIC_URL/wis-post-0.0.2-v3/_count" \
   -H 'Content-Type: application/json' \
-  -d '{"query":{"exists":{"field":"image_phash256"}}}'
+  -d '{"query":{"exists":{"field":"image_phash"}}}'
 ```
 
 Measured ~20–25 posts/s with 32 workers on the lab network (download-bound).
