@@ -1,0 +1,73 @@
+{
+ "all": {
+  "seeds": 200,
+  "fetch_errors": 0,
+  "candidates": 3520,
+  "candidates_with_hash": 3519,
+  "hash_coverage_pct": 100,
+  "removed": 496,
+  "removed_pct": 14.1,
+  "seeds_with_removal": 100,
+  "removed_matching_seed": 276,
+  "removed_matching_peer": 220,
+  "removed_degenerate_hash": 0,
+  "filter_p50_ms": 0.099,
+  "filter_p95_ms": 0.56,
+  "filter_max_ms": 1.931,
+  "distance_histogram": {
+   "0": 403,
+   "10": 6,
+   "2": 45,
+   "4": 23,
+   "6": 4,
+   "8": 15
+  }
+ },
+ "dupes": {
+  "seeds": 50,
+  "fetch_errors": 0,
+  "candidates": 808,
+  "candidates_with_hash": 808,
+  "hash_coverage_pct": 100,
+  "removed": 257,
+  "removed_pct": 31.8,
+  "seeds_with_removal": 36,
+  "removed_matching_seed": 171,
+  "removed_matching_peer": 86,
+  "removed_degenerate_hash": 0,
+  "filter_p50_ms": 0.05,
+  "filter_p95_ms": 0.177,
+  "filter_max_ms": 0.349,
+  "distance_histogram": {
+   "0": 200,
+   "10": 2,
+   "2": 32,
+   "4": 10,
+   "6": 4,
+   "8": 9
+  }
+ },
+ "random": {
+  "seeds": 150,
+  "fetch_errors": 0,
+  "candidates": 2712,
+  "candidates_with_hash": 2711,
+  "hash_coverage_pct": 100,
+  "removed": 239,
+  "removed_pct": 8.8,
+  "seeds_with_removal": 64,
+  "removed_matching_seed": 105,
+  "removed_matching_peer": 134,
+  "removed_degenerate_hash": 0,
+  "filter_p50_ms": 0.113,
+  "filter_p95_ms": 0.807,
+  "filter_max_ms": 1.931,
+  "distance_histogram": {
+   "0": 203,
+   "10": 4,
+   "2": 13,
+   "4": 13,
+   "8": 6
+  }
+ }
+}
