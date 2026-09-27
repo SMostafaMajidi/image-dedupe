@@ -15,7 +15,7 @@ Examples (testable stages):
   python scripts/backfill_phash_es.py --limit 50 --dry-run
 
 Verify one doc:
-  curl -s "$ELASTIC_URL/wis-post-0.0.2-v3/_doc/<POST_ID>?_source_includes=image_phash,id"
+  curl -s "$ELASTIC_URL/wis-post-0.0.2-v3/_doc/<POST_ID>?_source_includes=image_phash,image_phash256,id"
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.phash import InvalidImageError, compute_phash  # noqa: E402
+from app.phash import InvalidImageError, compute_phashes  # noqa: E402
 from scripts.import_wisgoon_posts import (  # noqa: E402
     DEFAULT_DSN_KEY,
     DEFAULT_SDK_CONFIG,
@@ -62,25 +62,27 @@ load_dotenv(ROOT / ".env")
 
 DEFAULT_ES_URL = os.getenv("ELASTIC_URL", "http://192.168.20.208:9200")
 DEFAULT_ES_INDEX = os.getenv("ELASTIC_POST_INDEX", "wis-post-0.0.2-v3")
+# pHash hash_size -> ES field
+HASH_FIELDS = {8: "image_phash", 16: "image_phash256"}
 
 
 def es_bulk_update(
     client: httpx.Client,
     base_url: str,
     index: str,
-    items: list[tuple[int, str]],
+    items: list[tuple[int, dict[str, str]]],
 ) -> tuple[int, int]:
-    """Partial-update ``image_phash`` via ES _bulk. Returns (ok, fail)."""
+    """Partial-update hash fields via ES _bulk. Returns (ok, fail)."""
     if not items:
         return 0, 0
     lines: list[str] = []
-    for post_id, phash in items:
+    for post_id, doc in items:
         lines.append(json.dumps({"update": {"_index": index, "_id": str(post_id)}}))
         # doc-only update: preserves other fields; skip if doc missing
         lines.append(
             json.dumps(
                 {
-                    "doc": {"image_phash": phash},
+                    "doc": doc,
                     "doc_as_upsert": False,
                 }
             )
@@ -122,6 +124,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--flush-size", type=int, default=100, help="ES bulk flush size")
     p.add_argument("--max-id", type=int, default=None, help="start below this post id")
     p.add_argument("--dry-run", action="store_true", help="hash only; do not write ES")
+    p.add_argument(
+        "--hash-sizes",
+        default="16",
+        help="comma list of pHash sizes: 16 -> image_phash256 (gateway), 8 -> image_phash",
+    )
     p.add_argument(
         "--elastic-url",
         default=DEFAULT_ES_URL,
@@ -193,9 +200,14 @@ def main() -> int:
                 args.max_id = ck_id
                 log.info("resume: continuing below max_id=%d from %s", ck_id, args.checkpoint_file)
 
+    hash_sizes = tuple(int(x) for x in args.hash_sizes.split(",") if x.strip())
+    if not hash_sizes or any(h not in HASH_FIELDS for h in hash_sizes):
+        log.error("--hash-sizes must be a subset of %s", sorted(HASH_FIELDS))
+        return 2
+
     mysql_cfg = load_mysql_config(args.config, args.dsn_key)
     log.info(
-        "mysql=%s:%s/%s es=%s index=%s limit=%d workers=%d dry_run=%s max_id=%s",
+        "mysql=%s:%s/%s es=%s index=%s limit=%d workers=%d dry_run=%s max_id=%s fields=%s",
         mysql_cfg.host,
         mysql_cfg.port,
         mysql_cfg.database,
@@ -205,6 +217,7 @@ def main() -> int:
         args.workers,
         args.dry_run,
         args.max_id,
+        [HASH_FIELDS[h] for h in hash_sizes],
     )
 
     ok = 0
@@ -212,7 +225,7 @@ def main() -> int:
     skip = 0
     last_id: int | None = None
     lock = threading.Lock()
-    pending: list[tuple[int, str]] = []
+    pending: list[tuple[int, dict[str, str]]] = []
     t0 = time.time()
 
     http_client = httpx.Client(
@@ -282,23 +295,23 @@ def main() -> int:
             fail += b_fail
         write_progress(force=True)
 
-    def process(post: PostRow) -> tuple[str, int | None, str | None]:
+    def process(post: PostRow) -> tuple[str, int | None, dict[str, str] | None]:
         url = make_image_url(post.image)
         try:
             data = download_image(http_client, url, args.max_upload_bytes)
         except Exception:
             return "fail_download", None, None
         try:
-            phash = compute_phash(data)
+            hashes = compute_phashes(data, hash_sizes)
         except InvalidImageError:
             return "skip_invalid", None, None
         except Exception:
             return "fail_hash", None, None
-        return "hashed", post.id, phash
+        return "hashed", post.id, {HASH_FIELDS[k]: v for k, v in hashes.items()}
 
-    def handle(result: tuple[str, int | None, str | None]) -> None:
+    def handle(result: tuple[str, int | None, dict[str, str] | None]) -> None:
         nonlocal ok, fail, skip, pending, last_id
-        status, post_id, phash = result
+        status, post_id, doc = result
         should_flush = False
         with lock:
             if post_id is not None:
@@ -309,11 +322,11 @@ def main() -> int:
                 skip += 1
             elif status.startswith("fail"):
                 fail += 1
-            elif status == "hashed" and post_id is not None and phash is not None:
+            elif status == "hashed" and post_id is not None and doc is not None:
                 if args.dry_run:
                     ok += 1
                 else:
-                    pending.append((post_id, phash))
+                    pending.append((post_id, doc))
                     should_flush = len(pending) >= args.flush_size
             done = ok + fail + skip
             if done % 50 == 0 or done <= 5 or (done + len(pending)) <= 5:

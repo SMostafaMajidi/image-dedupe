@@ -67,21 +67,24 @@ Config path: `WISGOON_CONNECTIONS_YAML` (default production `connections.yaml`).
 
 ### REL-DUP4 — pHash → Elasticsearch (for gateway related filter)
 
-Gateway reads `image_phash` from `wis-post-0.0.2-v3` (no request-time Python call).
+Gateway reads `image_phash256` (16x16 pHash, Hamming ≤ 16) from `wis-post-0.0.2-v3`
+(no request-time Python call). The 64-bit `image_phash` could not separate
+same-template posts with different text (tweet cards, text screens) from real
+reposts; see `sample_images/related_eval/template_probe/`.
 
 ```bash
-# stage 1 — mapping (idempotent; already applied on cluster)
+# stage 1 — mapping (idempotent)
 python scripts/put_es_phash_mapping.py
-curl -s "$ELASTIC_URL/wis-post-0.0.2-v3/_mapping/field/image_phash" | python3 -m json.tool
 
-# stage 2 — backfill (testable with --limit)
+# stage 2 — backfill (testable with --limit; default --hash-sizes 16)
 .venv/bin/python scripts/backfill_phash_es.py --limit 20 --workers 8
-.venv/bin/python scripts/backfill_phash_es.py --limit 600000 --workers 32   # ~1%
+LIMIT=1000000 ./scripts/run_overnight_phash_prod.sh            # overnight, in screen
+./scripts/run_overnight_phash_prod.sh --resume                 # continue older posts
 
 # verify coverage
 curl -s "$ELASTIC_URL/wis-post-0.0.2-v3/_count" \
   -H 'Content-Type: application/json' \
-  -d '{"query":{"exists":{"field":"image_phash"}}}'
+  -d '{"query":{"exists":{"field":"image_phash256"}}}'
 ```
 
 Measured ~20–25 posts/s with 32 workers on the lab network (download-bound).

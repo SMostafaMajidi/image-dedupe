@@ -25,16 +25,24 @@ class InvalidImageError(ValueError):
     """Raised when the bytes cannot be decoded as an image."""
 
 
-def compute_phash(data: bytes, hash_size: int = DEFAULT_HASH_SIZE) -> str:
-    """Return a stable hex string perceptual hash for raw image bytes."""
+def _decode(data: bytes) -> Image.Image:
     try:
         image = Image.open(BytesIO(data))
         image.load()
-        image = image.convert("RGB")
+        return image.convert("RGB")
     except (UnidentifiedImageError, OSError, ValueError) as exc:
         raise InvalidImageError(f"invalid or unreadable image: {exc}") from exc
 
-    return str(imagehash.phash(image, hash_size=hash_size))
+
+def compute_phash(data: bytes, hash_size: int = DEFAULT_HASH_SIZE) -> str:
+    """Return a stable hex string perceptual hash for raw image bytes."""
+    return str(imagehash.phash(_decode(data), hash_size=hash_size))
+
+
+def compute_phashes(data: bytes, hash_sizes: tuple[int, ...]) -> dict[int, str]:
+    """Decode once, return ``{hash_size: hex}`` for each requested size."""
+    image = _decode(data)
+    return {size: str(imagehash.phash(image, hash_size=size)) for size in hash_sizes}
 
 
 def hamming_distance(hash_a: str, hash_b: str) -> int:

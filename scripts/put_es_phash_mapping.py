@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage 1 (REL-DUP4): ensure ``image_phash`` keyword mapping on the post index.
+"""Stage 1 (REL-DUP4): ensure ``image_phash`` / ``image_phash256`` keyword mappings.
 
 Idempotent. Safe to re-run. Does not write any documents.
 
@@ -30,7 +30,13 @@ def main() -> int:
     args = p.parse_args()
 
     body = json.dumps(
-        {"properties": {"image_phash": {"type": "keyword", "doc_values": True}}}
+        {
+            "properties": {
+                "image_phash": {"type": "keyword", "doc_values": True},
+                # 16x16 pHash; used by the gateway related filter
+                "image_phash256": {"type": "keyword", "doc_values": True},
+            }
+        }
     ).encode()
     req = urllib.request.Request(
         f"{args.url.rstrip('/')}/{args.index}/_mapping",
@@ -46,7 +52,7 @@ def main() -> int:
         return 1
 
     check = urllib.request.urlopen(
-        f"{args.url.rstrip('/')}/{args.index}/_mapping/field/image_phash",
+        f"{args.url.rstrip('/')}/{args.index}/_mapping/field/image_phash,image_phash256",
         timeout=15,
     )
     print(check.read().decode())
