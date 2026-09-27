@@ -142,7 +142,31 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024))),
     )
+    p.add_argument(
+        "--checkpoint-file",
+        type=Path,
+        default=None,
+        help="write last processed post id here (resume with --max-id <that id>)",
+    )
+    p.add_argument(
+        "--status-file",
+        type=Path,
+        default=None,
+        help="atomic JSON progress (ok/fail/skip/rate/last_id) for overnight runs",
+    )
+    p.add_argument(
+        "--resume-from-checkpoint",
+        action="store_true",
+        help="if --checkpoint-file exists, set --max-id from it and continue older posts",
+    )
     return p.parse_args()
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
 
 
 def main() -> int:
@@ -161,9 +185,17 @@ def main() -> int:
         )
         return 2
 
+    if args.resume_from_checkpoint and args.checkpoint_file and args.checkpoint_file.is_file():
+        raw = args.checkpoint_file.read_text(encoding="utf-8").strip()
+        if raw.isdigit():
+            ck_id = int(raw)
+            if args.max_id is None or ck_id < args.max_id:
+                args.max_id = ck_id
+                log.info("resume: continuing below max_id=%d from %s", ck_id, args.checkpoint_file)
+
     mysql_cfg = load_mysql_config(args.config, args.dsn_key)
     log.info(
-        "mysql=%s:%s/%s es=%s index=%s limit=%d workers=%d dry_run=%s",
+        "mysql=%s:%s/%s es=%s index=%s limit=%d workers=%d dry_run=%s max_id=%s",
         mysql_cfg.host,
         mysql_cfg.port,
         mysql_cfg.database,
@@ -172,11 +204,13 @@ def main() -> int:
         args.limit,
         args.workers,
         args.dry_run,
+        args.max_id,
     )
 
     ok = 0
     fail = 0
     skip = 0
+    last_id: int | None = None
     lock = threading.Lock()
     pending: list[tuple[int, str]] = []
     t0 = time.time()
@@ -195,6 +229,36 @@ def main() -> int:
         headers={"User-Agent": "image-dedupe-phash-es/0.1"},
     )
 
+    def write_progress(force: bool = False) -> None:
+        if not args.status_file and not args.checkpoint_file:
+            return
+        with lock:
+            done = ok + fail + skip
+            if not force and done > 0 and done % 100 != 0:
+                return
+            elapsed = max(time.time() - t0, 1e-6)
+            payload = {
+                "ok": ok,
+                "fail": fail,
+                "skip": skip,
+                "pending": len(pending),
+                "last_id": last_id,
+                "limit": args.limit,
+                "max_id": args.max_id,
+                "elapsed_s": round(elapsed, 1),
+                "rate_per_s": round(done / elapsed, 2),
+                "es": args.elastic_url,
+                "index": args.index,
+                "dry_run": args.dry_run,
+                "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            }
+            ck = last_id
+        if args.status_file:
+            _write_json_atomic(args.status_file, payload)
+        if args.checkpoint_file and ck is not None:
+            args.checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
+            args.checkpoint_file.write_text(f"{ck}\n", encoding="utf-8")
+
     def flush_pending(force: bool = False) -> None:
         nonlocal ok, fail, pending
         with lock:
@@ -211,10 +275,12 @@ def main() -> int:
             log.warning("bulk flush error (%d items): %s", len(batch), exc)
             with lock:
                 fail += len(batch)
+            write_progress(force=True)
             return
         with lock:
             ok += b_ok
             fail += b_fail
+        write_progress(force=True)
 
     def process(post: PostRow) -> tuple[str, int | None, str | None]:
         url = make_image_url(post.image)
@@ -231,10 +297,14 @@ def main() -> int:
         return "hashed", post.id, phash
 
     def handle(result: tuple[str, int | None, str | None]) -> None:
-        nonlocal ok, fail, skip, pending
+        nonlocal ok, fail, skip, pending, last_id
         status, post_id, phash = result
         should_flush = False
         with lock:
+            if post_id is not None:
+                # keyset is DESC; keep the smallest id seen as resume cursor
+                if last_id is None or post_id < last_id:
+                    last_id = post_id
             if status.startswith("skip"):
                 skip += 1
             elif status.startswith("fail"):
@@ -249,16 +319,19 @@ def main() -> int:
             if done % 50 == 0 or done <= 5 or (done + len(pending)) <= 5:
                 rate = max(done, 1) / max(time.time() - t0, 1e-6)
                 log.info(
-                    "progress hashed_or_terminal=%d ok=%d fail=%d skip=%d pending=%d rate≈%.1f/s",
+                    "progress hashed_or_terminal=%d ok=%d fail=%d skip=%d pending=%d last_id=%s rate≈%.1f/s",
                     done + len(pending),
                     ok,
                     fail,
                     skip,
                     len(pending),
+                    last_id,
                     rate,
                 )
         if should_flush:
             flush_pending(force=True)
+        else:
+            write_progress()
 
     try:
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
@@ -279,6 +352,7 @@ def main() -> int:
                 for fut in done_set:
                     handle(fut.result())
         flush_pending(force=True)
+        write_progress(force=True)
     finally:
         http_client.close()
         es_client.close()
@@ -286,10 +360,11 @@ def main() -> int:
     elapsed = time.time() - t0
     total = ok + fail + skip
     log.info(
-        "DONE ok=%d fail=%d skip=%d elapsed=%.1fs (%.2f/s)",
+        "DONE ok=%d fail=%d skip=%d last_id=%s elapsed=%.1fs (%.2f/s)",
         ok,
         fail,
         skip,
+        last_id,
         elapsed,
         total / max(elapsed, 1e-6),
     )
@@ -299,6 +374,7 @@ def main() -> int:
         for label, n in (("1%", 600_000), ("10%", 6_000_000), ("43M ES", 43_000_000)):
             hours = n / rate / 3600
             log.info("ETA at this rate for %s (~%s posts): %.1f hours", label, f"{n:,}", hours)
+    write_progress(force=True)
     return 0 if ok > 0 or args.dry_run else 2
 
 

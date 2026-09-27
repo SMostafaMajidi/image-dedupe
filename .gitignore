@@ -9,3 +9,5 @@ venv/
 *.log
 sample_images/.generated
 .tools/
+
+logs/
