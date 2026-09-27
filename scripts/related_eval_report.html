@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<title>REL-DUP4 — مقایسهٔ فیلتر related: فعلی / 64 بیتی / 256 بیتی</title>
+<style>
+body{font-family:Vazirmatn,Tahoma,sans-serif;margin:0;background:#f4f5f7;color:#222}
+header{background:#1f2937;color:#fff;padding:18px 24px}
+header h1{margin:0;font-size:20px} header p{margin:6px 0 0;color:#cbd5e1;font-size:13px}
+main{padding:16px 24px;max-width:1900px}
+nav{position:sticky;top:0;background:#fff;border-bottom:1px solid #e5e7eb;padding:8px 24px;z-index:5;font-size:13px}
+nav a{margin-left:14px;color:#1d4ed8;text-decoration:none}
+section{background:#fff;border-radius:8px;padding:14px 18px;margin:14px 0;box-shadow:0 1px 3px #0001}
+h2{font-size:17px;margin:4px 0 10px} h3{font-size:14px;margin:14px 0 8px}
+table{border-collapse:collapse;font-size:13px} td,th{border:1px solid #ddd;padding:6px 10px;text-align:center}
+th{background:#f1f5f9} td.l{text-align:right} tr.rec td{background:#ecfdf5;font-weight:bold}
+.bar{height:10px;background:#ef4444;border-radius:3px;display:inline-block;vertical-align:middle}
+.legend span{display:inline-block;margin-left:14px;font-size:13px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:middle;margin-left:4px}
+.pairs{display:flex;flex-wrap:wrap;gap:8px;direction:ltr}
+.pair{border:2px solid #ccc;border-radius:6px;padding:4px;background:#fafafa;text-align:center;font-size:11px}
+.pair img{height:104px;width:104px;object-fit:cover;margin:1px}
+.pair.red{border-color:#dc2626}.pair.blue{border-color:#2563eb}.pair.green{border-color:#16a34a}
+.gal{display:flex;flex-wrap:wrap;gap:6px;direction:ltr}
+.gal div{text-align:center;font-size:11px}.gal img{width:96px;height:96px;object-fit:cover;border:2px solid #9ca3af;border-radius:4px}
+.seed{border-top:1px solid #e5e7eb;padding:10px 0;overflow-x:auto}
+.seed h3{font-size:13px;margin:0 0 6px}
+.row{display:flex;align-items:flex-start;gap:4px;direction:ltr;margin:3px 0}
+.rl{width:170px;flex:none;font-size:12px;direction:rtl;text-align:right;padding-top:40px}
+.cell{width:112px;flex:none;text-align:center;font-size:10px;position:relative}
+.cell img,.cell .na{width:108px;height:108px;object-fit:cover;border:4px solid #16a34a;border-radius:4px;box-sizing:border-box;display:block}
+.na{background:#e5e7eb;color:#6b7280;font-size:11px;line-height:100px}
+.cell.rm img,.cell.rm .na{border-color:#dc2626;opacity:.45}
+.cell.rm::after{content:"✕";position:absolute;top:28px;left:0;right:0;font-size:44px;color:#dc2626;font-weight:bold}
+.cell.seedc img,.cell.seedc .na{border-color:#2563eb}
+.cell.chg .lab{background:#fde68a}
+.lab{display:block;min-height:13px}
+.filters button{margin-left:6px;padding:5px 10px;border:1px solid #cbd5e1;background:#fff;border-radius:5px;cursor:pointer;font-family:inherit}
+.filters button.on{background:#1f2937;color:#fff}
+ul{margin:4px 0;padding-right:20px;font-size:14px;line-height:1.9}
+.muted{color:#6b7280;font-size:12px}
+code{background:#f1f5f9;padding:1px 4px;border-radius:3px;direction:ltr;unicode-bidi:embed}
+</style></head><body>
+<header><h1>REL-DUP4 — مقایسهٔ فیلتر تکراری‌های تصویری در related</h1>
+<p>حالت فعلی پرود (بدون فیلتر) در برابر pHash 64 بیتی و pHash 256 بیتی — روی همان لیست‌های related واقعی (endpoint عمومی v9) و با کد فیلتر گیت‌وی (<code>ApplyHashFilter</code>، حریصانه و غیرتعدی)</p></header>
+<nav><a href="#s-sum">خلاصه</a><a href="#s-find">یافته‌ها</a><a href="#s-diff">تفاوت‌ها</a><a href="#s-guard">محافظ کم‌جزئیات</a><a href="#s-rows">مقایسهٔ ردیفی</a><a href="#s-method">روش</a></nav>
+<main>
+<section id="s-sum"><h2>خلاصه</h2>
+<div id="summary"></div>
+<p class="muted" id="sumnote"></p>
+</section>
+
+<section id="s-find"><h2>یافته‌ها و پیشنهاد</h2><ul>
+<li><b>پیشنهاد:</b> pHash 256 بیتی با آستانهٔ ۱۶ + عدم ذخیرهٔ هش برای تصاویر کم‌جزئیات (ردیف سبز جدول).</li>
+<li><b>تکراری‌های واقعی:</b> هر دو هش تقریباً همان تکراری‌ها را می‌گیرند (بیشترشان کپی دقیق با فاصلهٔ ۰)؛ 256 بیتی با 64 بیتی آستانه ۲ در بیش از ۴۵۰ حذف مشترک است.</li>
+<li><b>قالب‌های مشابه با متن متفاوت</b> (کارت توییت، صفحهٔ متنی، «ذکر روز» روزهای مختلف، تبلیغ محصولات مختلف با یک قالب): 64 بیتی حذفشان می‌کند، 256 بیتی نگه می‌دارد — بخش «تفاوت‌ها».</li>
+<li><b>تصاویر تقریباً یکدست</b> (سیاه/سفید/یک رنگ با یک کلمه): هش 256 بیتی روی آن‌ها نویز است و تصاویر نامرتبط را یکی می‌کند. محافظ کم‌جزئیات این موارد را بدون از دست دادن هیچ حذف درستی رفع کرد — بخش «محافظ».</li>
+<li><b>با هش حل نمی‌شود:</b> سری‌ها (کاور یکسان، <code>part_9</code> / <code>part_10</code>) همچنان حذف می‌شوند و تصاویر کراپ‌شده گرفته نمی‌شوند. سری‌ها بهتر است با «سقف پست از هر کاربر» مدیریت شوند (۶۳٪ تکراری‌ها از همان کاربرند).</li>
+<li><b>ریسک صفحهٔ کم‌محتوا:</b> ستون «کمتر از ۵ پست باقی‌مانده» در جدول — گیت‌وی باید وقتی بعد از فیلتر پست کم ماند، کاندید بیشتری از ES بگیرد.</li>
+<li><b>تأخیر:</b> فیلتر روی ES اصلی (mget فقط فیلد هش): p95 ≈ ۱۳ms، زیر سقف ۱۵۰ms.</li>
+</ul></section>
+
+<section id="s-diff"><h2>تفاوت‌ها — جفت‌هایی که تصمیم روش‌ها فرق دارد</h2>
+<p class="muted">در هر جفت: چپ = پستی که حذف می‌شود/نمی‌شود، راست = پستی که با آن مقایسه شده (seed یا پست قبلیِ نمایش‌داده‌شده). زیر هر جفت فاصلهٔ Hamming در هر دو هش. «256» در این بخش یعنی حالت پیشنهادی (با محافظ).</p>
+<h3 id="h1"></h3><div class="pairs" id="d1"></div>
+<h3 id="h2"></h3><div class="pairs" id="d2"></div>
+<h3 id="h3"></h3><div class="pairs" id="d3"></div>
+</section>
+
+<section id="s-guard"><h2>محافظ کم‌جزئیات</h2>
+<p>pHash ضرایب DCT را با میانه‌شان مقایسه می‌کند؛ در تصویر تقریباً یکدست این ضرایب نویز فشرده‌سازی‌اند و هش بی‌معنا می‌شود. معیار <code>detail_score</code> (میانگین قدر مطلق ضرایب AC همان بلوک ۱۶×۱۶) محاسبه می‌شود و زیر آستانهٔ <b id="md"></b> هش ذخیره نمی‌شود — این پست‌ها هیچ‌وقت حذف نمی‌شوند.</p>
+<h3 id="h4"></h3><div class="pairs" id="d4"></div>
+<h3 id="h5"></h3><div class="gal" id="d5"></div>
+</section>
+
+<section id="s-rows"><h2>مقایسهٔ ردیفی هر seed</h2>
+<div class="legend"><span><i class="sw" style="background:#2563eb"></i>seed</span><span><i class="sw" style="background:#16a34a"></i>نمایش داده می‌شود</span><span><i class="sw" style="background:#dc2626"></i>حذف می‌شود</span><span><i class="sw" style="background:#fde68a"></i>تصمیم با حالت پیشنهادی فرق دارد</span></div>
+<div class="filters" style="margin:10px 0">
+<button data-f="diff" class="on">فقط seedهایی که روش‌ها فرق دارند</button>
+<button data-f="removed">همهٔ seedهای دارای حذف</button>
+<button data-f="few">کمتر از ۵ پست باقی‌مانده</button>
+<button data-f="random">تصادفی</button><button data-f="dupes">خوشه‌ای</button><button data-f="all">همه</button>
+<span class="muted" id="cnt"></span></div>
+<div id="seeds"></div>
+</section>
+
+<section id="s-method"><h2>روش آزمایش</h2><ul>
+<li>۲۰۰ seed از پست‌های دارای هش روی ES اصلی: ۱۵۰ تصادفی + ۵۰ از خوشه‌های هش تکراری (۲ تا ۵۰ پست با هش یکسان). seedهایی که related آن‌ها برای مهمان 404 بود کنار گذاشته شدند.</li>
+<li>برای هر seed دو صفحهٔ اول related از <code>gateway.wisgoon.com/api/v9/post/related/{uid}</code> گرفته شد؛ همهٔ حالت‌ها روی همین لیست ثابت اجرا شدند.</li>
+<li>در ردیف‌های «پوشش کامل» هش 64 و 256 بیتی همهٔ تصاویر لوکال محاسبه شد؛ روی ES اصلی چیزی نوشته نشد. ردیف «روی ES فعلی» پوشش واقعی امروز (۱M پست اخیر) را نشان می‌دهد.</li>
+<li>فیلتر: <code>services/imagededupe.ApplyHashFilter</code> — هر کاندید فقط با seed و پست‌های نگه‌داشته‌شده مقایسه می‌شود (بدون زنجیره). پست بدون هش همیشه نگه داشته می‌شود.</li>
+<li>ابزارها: <code>tools/eval_related_dedupe</code> (گیت‌وی)، <code>scripts/hash_eval_candidates.py</code>، <code>scripts/probe_low_detail.py</code>، <code>scripts/build_related_eval_report.py</code> (image-dedupe).</li>
+</ul></section>
+</main>
+<script>
+const D=__DATA__; const T=__THUMBS__;
+const fa=n=>String(n).replace(/\d/g,d=>'۰۱۲۳۴۵۶۷۸۹'[d]);
+const im=(id,cls)=>T[id]?`<img loading="lazy" src="${T[id]}"${cls?` class="${cls}"`:''}>`:`<div class="na">حذف‌شده از سایت</div>`;
+const REC=D.rec;
+(function(){
+ let h='<table><tr><th>حالت</th><th>کاندید</th><th>پوشش هش</th><th>حذف‌شده</th><th>درصد حذف</th><th></th><th>تصادفی</th><th>خوشه‌ای</th><th>seed دارای حذف</th><th>کمتر از ۵ پست باقی‌مانده</th></tr>';
+ for(const r of D.table){
+  h+=`<tr class="${r.rec?'rec':''}"><td class="l">${r.name}</td><td>${fa(r.cand)}</td><td>${r.cov==null?'—':fa(r.cov)+'٪'}</td><td>${fa(r.removed)}</td><td>${fa(r.pct)}٪</td><td style="width:160px;text-align:left"><span class="bar" style="width:${r.pct*8}px"></span></td><td>${r.random==null?'—':fa(r.random)+'٪'}</td><td>${r.dupes==null?'—':fa(r.dupes)+'٪'}</td><td>${fa(r.seeds)}</td><td>${r.few==null?'—':fa(r.few)}</td></tr>`;
+ }
+ document.getElementById('summary').innerHTML=h+'</table>';
+ document.getElementById('sumnote').textContent=`${fa(D.n_seeds)} seed دارای related (از ${fa(D.n_seeds_total)})، ${fa(D.n_images)} تصویر. درصد حذف نسبت به کل کاندیدهاست.`;
+})();
+function pairs(el,hel,title,list,cls){
+ document.getElementById(hel).textContent=title+' ('+fa(list.length)+')';
+ document.getElementById(el).innerHTML=list.length?list.map(p=>`<div class="pair ${cls}">${im(p.id)}${im(p.match)}<br>64-bit d=${p.d64} &nbsp; 256-bit d=${p.d256}<br><span class="muted">${p.id} ~ ${p.match}</span></div>`).join(''):'<span class="muted">موردی نیست</span>';
+}
+pairs('d1','h1','64 بیتی (آستانه ۱۰) حذف می‌کند، 256 بیتی نگه می‌دارد',D.diffs.t10_not_256,'red');
+pairs('d2','h2','64 بیتی (آستانه ۲) حذف می‌کند، 256 بیتی نگه می‌دارد',D.diffs.t2_not_256,'red');
+pairs('d3','h3','256 بیتی حذف می‌کند، 64 بیتی (آستانه ۲) نگه می‌دارد',D.diffs['256_not_t2'],'blue');
+document.getElementById('md').textContent=fa(D.min_detail);
+pairs('d4','h4','جفت‌هایی که 256 بیتیِ بدون محافظ اشتباه یکی می‌دانست و محافظ نگهشان داشت',D.diffs.guard_fixed,'green');
+document.getElementById('h5').textContent=`تصاویری که زیر آستانه‌اند و هش نمی‌گیرند (${fa(D.low_detail.length)} از ${fa(D.n_images)})`;
+document.getElementById('d5').innerHTML=D.low_detail.map(x=>`<div>${im(x.id)}<br>${x.score}</div>`).join('');
+const ROWS=[{key:null,label:'حالت فعلی (بدون فیلتر)'}].concat(D.configs.filter(c=>c.key!=='p256_t16'));
+function removedSet(s,k){return Object.keys(s.per[k].removed).sort().join()}
+function differs(s){return D.configs.some(c=>c.key!==REC&&c.key!=='p256_t16'&&removedSet(s,c.key)!==removedSet(s,REC))}
+function anyRm(s){return D.configs.some(c=>Object.keys(s.per[c.key].removed).length)}
+function left(s,k){return s.cands.length-Object.keys(s.per[k].removed).length}
+function cell(id,cls,lab){return `<div class="cell ${cls}">${im(id)}<span class="lab">${lab}</span></div>`}
+function row(label,s,key){
+ let h=`<div class="row"><div class="rl">${label}</div>`+cell(s.id,'seedc','seed');
+ for(const id of s.cands){
+  if(!key){h+=cell(id,'','');continue}
+  const m=s.per[key].removed[id]; const mr=s.per[REC].removed[id];
+  const chg=(!!m)!==(!!mr)?' chg':'';
+  h+=m?cell(id,'rm'+chg,'d='+m.d):cell(id,chg,'');
+ }
+ return h+'</div>';
+}
+function render(f){
+ let list=D.seeds.filter(s=>f==='all'||(f==='diff'&&differs(s))||(f==='removed'&&anyRm(s))||(f==='few'&&left(s,REC)<D.few_left)||(s.group===f));
+ list.sort((a,b)=>Object.keys(b.per[REC].removed).length-Object.keys(a.per[REC].removed).length);
+ document.getElementById('cnt').textContent=fa(list.length)+' seed';
+ document.getElementById('seeds').innerHTML=list.map(s=>{
+  const counts=D.configs.filter(c=>c.key!=='p256_t16').map(c=>`${c.label}: <bdi>${fa(left(s,c.key))}</bdi>`).join(' · ');
+  return `<div class="seed"><h3>seed <bdi>${s.id}</bdi> (<bdi>${s.uid}</bdi>، ${s.group==='random'?'تصادفی':'خوشه‌ای'}) — related: <bdi>${fa(s.cands.length)}</bdi> پست → ${counts}</h3>`
+   +ROWS.map(r=>row(r.label,s,r.key)).join('')+'</div>';
+ }).join('');
+}
+document.querySelectorAll('.filters button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.filters button').forEach(x=>x.classList.remove('on'));b.classList.add('on');render(b.dataset.f)});
+render('diff');
+</script></body></html>

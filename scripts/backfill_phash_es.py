@@ -37,7 +37,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.phash import InvalidImageError, compute_phashes  # noqa: E402
+from app.phash import InvalidImageError, LowDetailImageError, compute_phashes  # noqa: E402
 from scripts.import_wisgoon_posts import (  # noqa: E402
     DEFAULT_DSN_KEY,
     DEFAULT_SDK_CONFIG,
@@ -124,6 +124,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--flush-size", type=int, default=100, help="ES bulk flush size")
     p.add_argument("--max-id", type=int, default=None, help="start below this post id")
     p.add_argument("--dry-run", action="store_true", help="hash only; do not write ES")
+    p.add_argument(
+        "--min-detail",
+        type=float,
+        default=25.0,
+        help="skip near-flat images (app.phash.detail_score below this); 0 disables",
+    )
     p.add_argument(
         "--hash-sizes",
         default="16",
@@ -302,7 +308,9 @@ def main() -> int:
         except Exception:
             return "fail_download", None, None
         try:
-            hashes = compute_phashes(data, hash_sizes)
+            hashes = compute_phashes(data, hash_sizes, args.min_detail)
+        except LowDetailImageError:
+            return "skip_low_detail", post.id, None
         except InvalidImageError:
             return "skip_invalid", None, None
         except Exception:
