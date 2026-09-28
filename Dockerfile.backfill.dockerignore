@@ -1,0 +1,5 @@
+*
+!requirements-backfill.txt
+!app/__init__.py
+!app/phash.py
+!scripts/phash_backfill_worker.py

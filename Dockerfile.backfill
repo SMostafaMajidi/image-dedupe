@@ -1,0 +1,14 @@
+# syntax=docker/dockerfile:1
+# Slim image for scripts/phash_backfill_worker.py (no torch / qdrant).
+FROM python:3.13-slim
+
+WORKDIR /app
+COPY requirements-backfill.txt .
+RUN pip install --no-cache-dir -r requirements-backfill.txt
+
+COPY app/__init__.py app/phash.py ./app/
+COPY scripts/phash_backfill_worker.py ./scripts/
+
+ENV PYTHONUNBUFFERED=1
+ENTRYPOINT ["python", "scripts/phash_backfill_worker.py"]
+CMD ["run"]

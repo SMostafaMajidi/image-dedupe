@@ -2,7 +2,7 @@
 """Stage 2 (REL-DUP4): compute 256-bit pHash for IMAGE/VIDEO posts → ES ``image_phash``.
 
 VIDEO posts are hashed from their thumbnail (``pin_post.image``). Near-flat
-images get ``image_phash: null`` (their pHash is noise; also clears old values).
+images get the all-zero FLAT_PHASH sentinel (their pHash is noise).
 
 No CLIP — download + pHash + ES partial update only. Much faster than
 ``import_wisgoon_posts.py``.
@@ -43,7 +43,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.phash import InvalidImageError, LowDetailImageError, compute_phashes  # noqa: E402
+from app.phash import FLAT_PHASH, InvalidImageError, LowDetailImageError, compute_phashes  # noqa: E402
 from scripts.import_wisgoon_posts import (  # noqa: E402
     DEFAULT_DSN_KEY,
     DEFAULT_SDK_CONFIG,
@@ -265,7 +265,7 @@ def main() -> int:
                 "ok": ok,
                 "fail": fail,
                 "skip": skip,
-                "low_detail_cleared": low_detail,
+                "low_detail_flat": low_detail,
                 "content_type": args.content_type,
                 "pending": len(pending),
                 "last_id": last_id,
@@ -317,7 +317,7 @@ def main() -> int:
         try:
             hashes = compute_phashes(data, (HASH_SIZE,), args.min_detail)
         except LowDetailImageError:
-            return "low_detail", post.id, {args.field: None}
+            return "low_detail", post.id, {args.field: FLAT_PHASH}
         except InvalidImageError:
             return "skip_invalid", None, None
         except Exception:
@@ -391,7 +391,7 @@ def main() -> int:
     elapsed = time.time() - t0
     total = ok + fail + skip
     log.info(
-        "DONE ok=%d (low_detail_cleared=%d) fail=%d skip=%d last_id=%s elapsed=%.1fs (%.2f/s)",
+        "DONE ok=%d (low_detail_flat=%d) fail=%d skip=%d last_id=%s elapsed=%.1fs (%.2f/s)",
         ok,
         low_detail,
         fail,

@@ -22,6 +22,11 @@ from PIL import Image, UnidentifiedImageError
 
 DEFAULT_HASH_SIZE = 8  # 8x8 -> 64-bit hash (standard pHash size)
 
+# Stored instead of a hash for near-flat images (see detail_score). A real
+# pHash sets about half its bits, so all-zero never collides with one.
+FLAT_PHASH = "0" * 64
+MIN_DETAIL = 25.0
+
 
 class InvalidImageError(ValueError):
     """Raised when the bytes cannot be decoded as an image."""

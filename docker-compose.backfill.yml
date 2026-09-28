@@ -1,0 +1,41 @@
+# 256-bit pHash backfill for IMAGE + VIDEO posts -> ES image_phash (production).
+# Starts from the newest post at first start and walks down; resumes from
+# ./backfill-data/state.json after any stop / crash / reboot.
+#
+#   docker compose -f docker-compose.backfill.yml up -d --build
+#   docker compose -f docker-compose.backfill.yml exec phash-backfill python scripts/phash_backfill_worker.py status
+#   docker compose -f docker-compose.backfill.yml logs --tail 20 phash-backfill
+name: image-dedupe-backfill
+
+services:
+  phash-backfill:
+    build:
+      context: .
+      dockerfile: Dockerfile.backfill
+    image: image-dedupe-phash-backfill
+    container_name: phash-backfill
+    restart: unless-stopped
+    user: "${BACKFILL_UID:-1000}:${BACKFILL_GID:-1000}"
+    stop_grace_period: 20s
+    environment:
+      ALLOW_PROD_ES_WRITE: "1"
+      ES_URL: ${ES_URL:-http://192.168.20.208:9200}
+      ES_INDEX: wis-post-0.0.2-v3
+      ES_FIELD: image_phash
+      MYSQL_CONFIG: /config/connections.yaml
+      MYSQL_DSN_KEY: read_db
+      STATE_DIR: /data
+      WORKERS: ${WORKERS:-28}
+      BATCH: ${BATCH:-1000}
+      LOG_EVERY_S: ${LOG_EVERY_S:-300}
+      START_MAX_ID: ${START_MAX_ID:-}
+      STOP_AFTER_BATCHES: ${STOP_AFTER_BATCHES:-0}
+    volumes:
+      - ${BACKFILL_DATA:-./backfill-data}:/data
+      - /etc/localtime:/etc/localtime:ro
+      - ${WISGOON_CONNECTIONS_YAML:-/home/mostafa/Documents/wisgoon/sdk/configs/production/connections.yaml}:/config/connections.yaml:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

@@ -71,14 +71,24 @@ Gateway reads `image_phash` — a 256-bit (16x16) pHash, Hamming ≤ 16 — from
 `wis-post-0.0.2-v3` (no request-time Python call). 64-bit pHash could not separate
 same-template posts with different text (tweet cards, text screens) from real
 reposts; see `sample_images/related_eval/report_256_vs_64.html`. VIDEO posts are
-hashed from their thumbnail. Near-flat images get `image_phash: null`. The gateway
-ignores values that are not 64 hex chars (old 64-bit hashes during migration).
+hashed from their thumbnail. Near-flat images get the all-zero sentinel
+(`"0" * 64`) and the gateway drops them from related. The gateway ignores values
+that are not 64 hex chars (old 64-bit hashes during migration).
+
+New posts are hashed by the search consumer (`wisgoon/ms/search`, Go port of the
+same pHash); the backfill below covers everything older than its first start.
 
 ```bash
 # stage 1 — mapping (idempotent)
 python scripts/put_es_phash_mapping.py
 
-# stage 2 — backfill (testable with --limit; default --hash-sizes 16)
+# stage 2 — full backfill in Docker (IMAGE + VIDEO, newest -> oldest, resumable)
+docker compose -f docker-compose.backfill.yml up -d --build
+docker compose -f docker-compose.backfill.yml exec phash-backfill python scripts/phash_backfill_worker.py status
+docker compose -f docker-compose.backfill.yml logs --tail 20 phash-backfill   # one line / 5 min
+# state + small rotating log: ./backfill-data/{state.json,backfill.log}
+
+# ad-hoc runs (testable with --limit)
 .venv/bin/python scripts/backfill_phash_es.py --limit 20 --workers 8
 LIMIT=1000000 ./scripts/run_overnight_phash_prod.sh                      # IMAGE, in screen
 CONTENT_TYPE=VIDEO LIMIT=1000000 ./scripts/run_overnight_phash_prod.sh   # video thumbnails
