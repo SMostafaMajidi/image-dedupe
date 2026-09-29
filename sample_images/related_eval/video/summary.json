@@ -1,0 +1,24 @@
+{
+ "seeds": 199,
+ "candidates": 3358,
+ "removed": 109,
+ "removed_pct": 3.2,
+ "by_seed": 9,
+ "by_peer": 42,
+ "flat": 58,
+ "no_hash": 0,
+ "same_user": 11,
+ "pair_same_video": 41,
+ "pair_diff_video": 8,
+ "pair_unknown": 2,
+ "few_left": 0,
+ "dist_hist": {
+  "6": 4,
+  "0": 30,
+  "10": 1,
+  "8": 3,
+  "4": 7,
+  "2": 6
+ },
+ "non_video_candidates": 0
+}

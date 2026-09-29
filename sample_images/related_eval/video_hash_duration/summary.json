@@ -1,0 +1,26 @@
+{
+ "criterion": "hash+duration",
+ "seeds": 198,
+ "candidates": 3555,
+ "removed": 104,
+ "removed_pct": 2.9,
+ "by_seed": 9,
+ "by_peer": 35,
+ "flat": 60,
+ "no_hash": 0,
+ "rescued": 6,
+ "same_user": 6,
+ "pair_same_video": 42,
+ "pair_diff_video": 0,
+ "pair_unknown": 2,
+ "few_left": 0,
+ "dist_hist": {
+  "6": 4,
+  "0": 26,
+  "10": 1,
+  "8": 3,
+  "4": 4,
+  "2": 6
+ },
+ "non_video_candidates": 0
+}
